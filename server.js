@@ -1,0 +1,69 @@
+import dotenv from 'dotenv';
+import { Configuration, OpenAIApi } from 'openai';
+import Twit from 'twit';
+import axios from 'axios';
+import cron from 'node-cron';
+import fs from 'fs';
+import path from 'path';
+
+dotenv.config();
+
+const openai = new OpenAIApi(new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
+}));
+
+const twitter = new Twit({
+  consumer_key: process.env.TWITTER_CONSUMER_KEY,
+  consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
+  access_token: process.env.TWITTER_ACCESS_TOKEN,
+  access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
+});
+
+// 建立每天早上五點的排程
+cron.schedule('0 5 * * *', async () => {
+  try {
+    const quote = await generateQuote();
+    const imageUrl = await generateImage(quote);
+    const imagePath = await downloadImage(imageUrl);
+
+    const imageData = fs.readFileSync(imagePath, { encoding: 'base64' });
+
+    twitter.post('media/upload', { media_data: imageData }, (err, data) => {
+      if (err) return console.error(err);
+
+      const mediaId = data.media_id_string;
+      const status = { status: quote, media_ids: [mediaId] };
+
+      twitter.post('statuses/update', status, (err, data) => {
+        if (err) console.error(err);
+        else console.log('成功發文！');
+      });
+    });
+  } catch (err) {
+    console.error('錯誤:', err.message);
+  }
+});
+
+async function generateQuote() {
+  const res = await openai.createChatCompletion({
+    model: 'gpt-4',
+    messages: [{ role: 'user', content: '請寫一句融合哲學、迷因、宇宙觀的 Gloopi 語錄。' }]
+  });
+  return res.data.choices[0].message.content.trim();
+}
+
+async function generateImage(prompt) {
+  const res = await openai.createImage({
+    prompt: `A cute green alien with two antennae, sitting or moving, random cosmic background`,
+    n: 1,
+    size: '512x512',
+  });
+  return res.data.data[0].url;
+}
+
+async function downloadImage(url) {
+  const filePath = path.join('/tmp', 'gloopi.png');
+  const response = await axios({ url, responseType: 'arraybuffer' });
+  fs.writeFileSync(filePath, response.data);
+  return filePath;
+}
