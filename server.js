@@ -19,13 +19,11 @@ const twitter = new Twit({
   access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
 });
 
-// 建立每天早上五點的排程
 cron.schedule('0 5 * * *', async () => {
   try {
     const quote = await generateQuote();
     const imageUrl = await generateImage(quote);
     const imagePath = await downloadImage(imageUrl);
-
     const imageData = fs.readFileSync(imagePath, { encoding: 'base64' });
 
     twitter.post('media/upload', { media_data: imageData }, (err, data) => {
@@ -54,7 +52,7 @@ async function generateQuote() {
 
 async function generateImage(prompt) {
   const res = await openai.createImage({
-    prompt: `A cute green alien with two antennae, sitting or moving, random cosmic background`,
+    prompt: 'A cute green alien with two antennae, sitting or moving, random cosmic background',
     n: 1,
     size: '512x512',
   });
