@@ -1,10 +1,10 @@
-import dotenv from 'dotenv';
-import { Configuration, OpenAIApi } from 'openai';
-import Twit from 'twit';
-import axios from 'axios';
-import cron from 'node-cron';
-import fs from 'fs';
-import path from 'path';
+const dotenv = require('dotenv');
+const { Configuration, OpenAIApi } = require('openai');
+const Twit = require('twit');
+const axios = require('axios');
+const cron = require('node-cron');
+const fs = require('fs');
+const path = require('path');
 
 dotenv.config();
 
