@@ -1,61 +1,73 @@
-const express = require('express');
-const cron = require('node-cron');
-const { TwitterApi } = require('twitter-api-v2');
+const dotenv = require('dotenv');
 const { Configuration, OpenAIApi } = require('openai');
-require('dotenv').config();
+const Twit = require('twit');
+const axios = require('axios');
+const cron = require('node-cron');
+const fs = require('fs');
+const path = require('path');
+const express = require('express'); // 重要：Render 需要一個 Web 伺服器防止自動關機
+
+dotenv.config();
 
 const app = express();
+app.get('/', (req, res) => res.send('Gloopi bot is running.'));
+app.listen(process.env.PORT || 3000, () => console.log('Server started'));
 
-// === OpenAI 設定 ===
-const openai = new OpenAIApi(
-  new Configuration({
-    apiKey: process.env.OPENAI_API_KEY,
-  })
-);
+const openai = new OpenAIApi(new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
+}));
 
-// === Twitter 設定 ===
-const twitterClient = new TwitterApi({
-  appKey: process.env.TWITTER_API_KEY,
-  appSecret: process.env.TWITTER_API_SECRET,
-  accessToken: process.env.TWITTER_ACCESS_TOKEN,
-  accessSecret: process.env.TWITTER_ACCESS_SECRET,
+const twitter = new Twit({
+  consumer_key: process.env.TWITTER_CONSUMER_KEY,
+  consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
+  access_token: process.env.TWITTER_ACCESS_TOKEN,
+  access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
 });
 
-// === 每天早上 5:00（台灣） → UTC 時區 +8 所以是每天 21:00 UTC ===
-cron.schedule('0 21 * * *', async () => {
+// 每天早上 5 點自動發文
+cron.schedule('0 5 * * *', async () => {
   try {
-    console.log('⏰ 開始產生 Gloopi 語錄...');
+    const quote = await generateQuote();
+    const imageUrl = await generateImage(quote);
+    const imagePath = await downloadImage(imageUrl);
+    const imageData = fs.readFileSync(imagePath, { encoding: 'base64' });
 
-    const completion = await openai.createChatCompletion({
-      model: 'gpt-4',
-      messages: [
-        {
-          role: 'system',
-          content: '你是一個綠色、頭上有兩條天線的小可愛角色 Gloopi，要寫一則哲學迷因語錄，融合宇宙觀與網路幽默，風格獨特但簡潔。'
-        },
-        {
-          role: 'user',
-          content: '寫一則語錄'
-        }
-      ]
+    twitter.post('media/upload', { media_data: imageData }, (err, data) => {
+      if (err) return console.error('上傳圖片錯誤:', err);
+
+      const mediaId = data.media_id_string;
+      const status = { status: quote, media_ids: [mediaId] };
+
+      twitter.post('statuses/update', status, (err) => {
+        if (err) console.error('發文錯誤:', err);
+        else console.log('✅ 成功發文：', quote);
+      });
     });
-
-    const quote = completion.data.choices[0].message.content.trim();
-    console.log('✅ 語錄產生完成：', quote);
-
-    await twitterClient.v2.tweet(quote);
-    console.log('🐦 發文成功！');
-  } catch (error) {
-    console.error('❌ 發文失敗：', error);
+  } catch (err) {
+    console.error('錯誤:', err.message);
   }
 });
 
-// === Express 保持 Render 醒著 ===
-app.get('/', (req, res) => {
-  res.send('Gloopi 自動發文機 正常運行中 👾');
-});
+async function generateQuote() {
+  const res = await openai.createChatCompletion({
+    model: 'gpt-4',
+    messages: [{ role: 'user', content: '請寫一句融合哲學、迷因、宇宙觀的 Gloopi 語錄。' }]
+  });
+  return res.data.choices[0].message.content.trim();
+}
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Gloopi server is running on port ${PORT}`);
-});
+async function generateImage(prompt) {
+  const res = await openai.createImage({
+    prompt: 'A cute green alien with two antennae, sitting or moving, random cosmic background',
+    n: 1,
+    size: '512x512',
+  });
+  return res.data.data[0].url;
+}
+
+async function downloadImage(url) {
+  const filePath = path.join('/tmp', 'gloopi.png');
+  const response = await axios({ url, responseType: 'arraybuffer' });
+  fs.writeFileSync(filePath, response.data);
+  return filePath;
+}
