@@ -6,9 +6,6 @@ const cron = require('node-cron');
 const fs = require('fs');
 const path = require('path');
 const express = require('express'); // 重要：Render 需要一個 Web 伺服器防止自動關機
-
-dotenv.config();
-
 const app = express();
 app.get('/', (req, res) => res.send('Gloopi bot is running.'));
 app.listen(process.env.PORT || 3000, () => console.log('Server started'));
