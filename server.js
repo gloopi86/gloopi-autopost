@@ -64,7 +64,6 @@ async function generateImage(prompt) {
   });
   return res.data.data[0].url;
 }
-
 async function downloadImage(url) {
   const response = await axios.get(url, { responseType: 'arraybuffer' });
   const imageBuffer = Buffer.from(response.data, 'binary');
